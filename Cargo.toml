@@ -2,6 +2,9 @@
 name = "doodads"
 version = "0.1.0"
 edition = "2024"
+description = "A collection of small tools I use in my Rust projects. Full of whimsical ergonomic trinkets."
+license = "MIT"
+repository = "https://github.com/lukaseuph/doodads-rs"
 
 [dependencies]
 itertools = "0.15.0"
