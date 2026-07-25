@@ -23,6 +23,14 @@ impl<T> SiVec<T> {
         }
     }
 
+    fn get(&self, index: usize) -> Option<&T> {
+        if index < self.data.len() {
+            Some(&self[index])
+        } else {
+            None
+        }
+    }
+
     fn insert(&mut self, element: T) -> usize {
         if self.data.len() == self.id.len() {
             let previous_capacity = self.data.len();
@@ -101,7 +109,7 @@ impl<T> Deref for SiVec<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn from_array() {
         let a = SiVec::from([1, 2, 3]);
@@ -140,5 +148,49 @@ mod tests {
         b.insert(2);
         b.insert(3);
         assert_eq!(a, b);
+    }
+
+    #[test]
+    fn verify_empty() {
+        let siv = SiVec::<i32>::new();
+        assert!(siv.is_empty());
+
+        let mut siv = SiVec::from([1, 2, 3]);
+        assert!(!siv.is_empty());
+        siv.remove(0);
+        siv.remove(1);
+        siv.remove(2);
+        assert!(siv.is_empty());
+    }
+
+    #[test]
+    fn remove_middle_element() {
+        let mut siv = SiVec::from([1, 2, 3]);
+        siv.remove(1);
+        assert_eq!(siv.len(), 2);
+        assert_eq!(*siv, [1, 3]);
+        assert_eq!(siv[0], 1);
+        assert_eq!(siv[2], 3);
+    }
+
+    #[test]
+    fn remove_insert() {
+        let mut siv = SiVec::from([1, 2, 3]);
+        siv.remove(1);
+        assert_eq!(*siv, [1, 3]);
+        siv.insert(4);
+        assert_eq!(*siv, [1, 3, 4]);
+        assert_eq!(siv[0], 1);
+        assert_eq!(siv[1], 4);
+        assert_eq!(siv[2], 3);
+    }
+
+    #[test]
+    fn get_element() {
+        let siv = SiVec::from([1, 2, 3]);
+        assert_eq!(siv.get(0), Some(&1));
+        assert_eq!(siv.get(1), Some(&2));
+        assert_eq!(siv.get(2), Some(&3));
+        assert_eq!(siv.get(3), None);
     }
 }
