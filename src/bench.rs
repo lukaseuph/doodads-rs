@@ -6,7 +6,7 @@ macro_rules! st {
     };
     (print $label:expr) => {
         let _st = $crate::bench::ScopeTimer::print($label);
-    }
+    };
 }
 
 /// Tracks how long the scope it is constructed in takes to execute using a [Drop] implementation.
@@ -16,6 +16,8 @@ macro_rules! st {
 /// For situations where you need to pass in a function or closure, use [ScopeTimer::new].
 /// # Examples
 /// ```rust
+/// use doodads::bench::ScopeTimer;
+///
 /// fn foo() {
 ///     // will print how long the function took
 ///     let _st = ScopeTimer::print("example::foo");

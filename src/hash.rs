@@ -1,12 +1,12 @@
+use is_prime::is_prime;
+use itertools::Itertools;
+use num_traits::ToBytes;
 use paste::paste;
 use std::fmt;
 use std::fmt::Formatter;
 use std::num::Wrapping;
 use std::ops::{AddAssign, MulAssign};
 use std::slice::Iter;
-use is_prime::is_prime;
-use itertools::Itertools;
-use num_traits::ToBytes;
 
 /// Default implementation of the AmpHasher
 pub const AMP: AmpHasher = unsafe {
@@ -31,6 +31,8 @@ pub const AMP: AmpHasher = unsafe {
 /// # Examples
 /// ## Creating your own AmpHasher instance
 /// ```rust
+/// use doodads::hash::AmpHasher;
+///
 /// let my_amp = AmpHasher::new(
 ///     131,                                    // prime u8
 ///     50671,                                  // prime u16
@@ -38,7 +40,7 @@ pub const AMP: AmpHasher = unsafe {
 ///     18123145269993195119,                   // prime u64
 ///     230663825421896382524516261427012097267,// prime u128
 ///     337891335454201426143216793176103336809,// seed as u128
-/// )
+/// );
 /// ```
 #[derive(Debug, Copy, Clone)]
 pub struct AmpHasher {
@@ -55,7 +57,14 @@ pub struct AmpHasher {
 }
 
 impl AmpHasher {
-    pub fn new(prime_u8: u8, prime_u16: u16, prime_u32: u32, prime_u64: u64, prime_u128: u128, seed: u128) -> Result<Self, AmpHasherError> {
+    pub fn new(
+        prime_u8: u8,
+        prime_u16: u16,
+        prime_u32: u32,
+        prime_u64: u64,
+        prime_u128: u128,
+        seed: u128,
+    ) -> Result<Self, AmpHasherError> {
         let (seed_u8, seed_u16, seed_u32, seed_u64, seed_u128) = Self::get_seeds(seed);
         Ok(Self {
             prime_u8: if is_prime(&format!("{prime_u8}")) {
@@ -96,9 +105,27 @@ impl AmpHasher {
     /// In order to avoid faulty behavior, you must ensure that each parameter of this function call is prime.
     ///
     /// Note that if any of the values provided are `0`, all calls to [AmpHasher::digest] for that integer type will return `0`.
-    pub const unsafe fn new_unchecked(prime_u8: u8, prime_u16: u16, prime_u32: u32, prime_u64: u64, prime_u128: u128, seed: u128) -> Self {
+    pub const unsafe fn new_unchecked(
+        prime_u8: u8,
+        prime_u16: u16,
+        prime_u32: u32,
+        prime_u64: u64,
+        prime_u128: u128,
+        seed: u128,
+    ) -> Self {
         let (seed_u8, seed_u16, seed_u32, seed_u64, seed_u128) = Self::get_seeds(seed);
-        Self { prime_u8, prime_u16, prime_u32, prime_u64, prime_u128, seed_u8, seed_u16, seed_u32, seed_u64, seed_u128 }
+        Self {
+            prime_u8,
+            prime_u16,
+            prime_u32,
+            prime_u64,
+            prime_u128,
+            seed_u8,
+            seed_u16,
+            seed_u32,
+            seed_u64,
+            seed_u128,
+        }
     }
 
     const fn get_seeds(seed: u128) -> (u8, u16, u32, u64, u128) {
@@ -106,7 +133,9 @@ impl AmpHasher {
         let seed_u8 = bytes[0];
         let seed_u16 = u16::from_be_bytes([bytes[0], bytes[1]]);
         let seed_u32 = u32::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3]]);
-        let seed_u64 = u64::from_be_bytes([bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7]]);
+        let seed_u64 = u64::from_be_bytes([
+            bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+        ]);
         (seed_u8, seed_u16, seed_u32, seed_u64, seed)
     }
 
@@ -127,11 +156,11 @@ impl AmpHasher {
 
     pub const fn const_digest<T>(&self, data: &[u8]) -> T
     where
-        T: ~const From<u8> + Copy,
-        Wrapping<T>: ~const AddAssign<T> + ~const MulAssign<T>,
-        Self: ~const AmpDigest<T>,
-        &'static [u8]: ~const IntoIterator,
-        Iter<'static, u8>: ~const Iterator,
+        T: [const] From<u8> + Copy,
+        Wrapping<T>: [const] AddAssign<T> + [const] MulAssign<T>,
+        Self: [const] AmpDigest<T>,
+        &'static [u8]: [const] IntoIterator,
+        Iter<'static, u8>: [const] Iterator,
     {
         let mut sum: Wrapping<T> = Wrapping(self.seed());
         for &b in data {
@@ -142,22 +171,29 @@ impl AmpHasher {
     }
 
     /// Digests an unordered list using the AMP algorithm.
-    pub fn digest_unordered<T>(&self, data: &[impl AsRef<[u8]>]) -> T where
+    pub fn digest_unordered<T>(&self, data: &[impl AsRef<[u8]>]) -> T
+    where
         T: From<u8> + Copy + Ord + ToBytes + fmt::Debug,
         Wrapping<T>: AddAssign<T> + MulAssign<T>,
         Self: AmpDigest<T>,
     {
-        let mut list = data.iter().map(|bytes| self.digest(bytes.as_ref())).collect_vec();
+        let mut list = data
+            .iter()
+            .map(|bytes| self.digest(bytes.as_ref()))
+            .collect_vec();
         list.sort();
         dbg!(&list);
-        let flat = list.iter()
+        let flat = list
+            .iter()
             .flat_map(|hash| hash.to_be_bytes().as_ref().to_vec())
             .collect_vec();
         self.digest(&flat)
     }
 }
 impl Default for AmpHasher {
-    fn default() -> Self { AMP }
+    fn default() -> Self {
+        AMP
+    }
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]

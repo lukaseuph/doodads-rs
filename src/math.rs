@@ -3,7 +3,10 @@
 use num_traits::{Bounded, Float, Num, Signed, ToPrimitive};
 use std::cmp::Ordering;
 use std::fmt;
-use std::ops::{Add, AddAssign, Deref, Div, DivAssign, Mul, MulAssign, Neg, RangeFrom, RangeInclusive, RangeTo, Rem, RemAssign, Sub, SubAssign};
+use std::ops::{
+    Add, AddAssign, Deref, Div, DivAssign, Mul, MulAssign, Neg, RangeFrom, RangeInclusive, RangeTo,
+    Rem, RemAssign, Sub, SubAssign,
+};
 
 /// Numeric types [`Clamp`] can wrap.
 ///
@@ -54,7 +57,9 @@ macro_rules! impl_clamp_num_int {
         )*
     };
 }
-impl_clamp_num_int!(i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize);
+impl_clamp_num_int!(
+    i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize
+);
 macro_rules! impl_clamp_num_float {
     ($($t:ty),*) => {
         $(
@@ -84,7 +89,7 @@ impl_clamp_num_float!(f32, f64);
 /// panicking.
 ///
 /// ```
-/// use clamp_test::Clamp;
+/// use doodads::math::Clamp;
 ///
 /// let mut health = Clamp::new(80u32, 0, 100);
 /// health += 50;
@@ -133,33 +138,39 @@ impl<T: ClampNum> Clamp<T> {
     }
 
     pub unsafe fn new_unchecked(value: T, min: T, max: T) -> Self {
-        Self {
-            value,
-            min,
-            max,
-        }
+        Self { value, min, max }
     }
 
     /// The current (always in-bounds) value.
     #[inline]
-    pub fn value(&self) -> T { self.value }
+    pub fn value(&self) -> T {
+        self.value
+    }
 
     /// The lower bound.
     #[inline]
-    pub fn min(&self) -> T { self.min }
+    pub fn min(&self) -> T {
+        self.min
+    }
 
     /// The upper bound.
     #[inline]
-    pub fn max(&self) -> T { self.max }
+    pub fn max(&self) -> T {
+        self.max
+    }
 
     /// Replaces the inner value, saturating it into the existing range.
     pub fn set(&mut self, value: T) {
         self.value = clamp_value(value, self.min, self.max);
     }
 
-    pub fn set_min(&mut self, min: T) { self.min = min; }
+    pub fn set_min(&mut self, min: T) {
+        self.min = min;
+    }
 
-    pub fn set_max(&mut self, max: T) { self.max = max; }
+    pub fn set_max(&mut self, max: T) {
+        self.max = max;
+    }
 
     /// Changes the bounds, re-saturating the current value into the new range.
     ///
@@ -185,10 +196,14 @@ impl<T: ClampNum> Clamp<T> {
     }
 
     /// `true` if the value is currently pinned to the lower bound.
-    pub fn is_at_min(&self) -> bool { self.value == self.min }
+    pub fn is_at_min(&self) -> bool {
+        self.value == self.min
+    }
 
     /// `true` if the value is currently pinned to the upper bound.
-    pub fn is_at_max(&self) -> bool { self.value == self.max }
+    pub fn is_at_max(&self) -> bool {
+        self.value == self.max
+    }
 
     /// Distance from the current value up to `max`.
     pub fn headroom(&self) -> T {
@@ -247,7 +262,11 @@ impl<T: ClampNum> ClampRangeApi<T, RangeInclusive<T>> for Clamp<T> {
 }
 impl<T: ClampNum + Bounded> ClampRangeApi<T, RangeFrom<T>> for Clamp<T> {
     fn from_range(value: T, range: RangeFrom<T>) -> Self {
-        Self { value, min: range.start, max: T::max_value() }
+        Self {
+            value,
+            min: range.start,
+            max: T::max_value(),
+        }
     }
 
     fn set_bounds_from_range(&mut self, range: RangeFrom<T>) {
@@ -262,7 +281,11 @@ impl<T: ClampNum + Bounded> ClampRangeApi<T, RangeFrom<T>> for Clamp<T> {
 }
 impl<T: ClampNum + Bounded> ClampRangeApi<T, RangeTo<T>> for Clamp<T> {
     fn from_range(value: T, range: RangeTo<T>) -> Self {
-        Self { value, min: T::min_value(), max: range.end }
+        Self {
+            value,
+            min: T::min_value(),
+            max: range.end,
+        }
     }
 
     fn set_bounds_from_range(&mut self, range: RangeTo<T>) {
@@ -358,7 +381,7 @@ pub trait ClampRangeApi<T, R> {
 
 trait UnFuck
 where
-    Self: Sized
+    Self: Sized,
 {
     fn unfuck(self) -> Option<Self>;
 }

@@ -8,77 +8,44 @@ pub mod hash;
 pub mod math;
 pub mod sivec;
 
-use std::cell::{Cell, RefCell};
-use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{LowerHex, UpperHex};
 use std::hash::{BuildHasher, Hash};
-use std::pin::Pin;
-use std::rc::Rc;
-use std::sync::{Arc, Mutex, RwLock};
 
-/// Provides methods to wrap `self` in [`Option`], [`Result`],
-/// and other wrapper types like smart pointers.
-/// Intended for use in method chains to improve readability.
-/// Instead of your eyes jumping back to the top of the chain
-/// to read `Ok(...)`, you can keep the vertical ordering and
-/// end the chain with `.wrap_ok()`
+/// Provides a [`pipe`] method for chaining functions that map a value to another value.
 ///
-/// Globally implemented on all [`Sized`] types.
-pub trait WrapSelf
+/// # Examples
+///
+/// ```
+/// use doodads::Pipe;
+///
+/// let result = 42.pipe(|x| x * 2);
+/// assert_eq!(result, 84);
+/// ```
+///
+/// ```
+/// use doodads::Pipe;
+///
+/// let result = "some input".pipe(Ok);
+/// assert_eq!(result, Ok("some input"));
+/// ```
+pub trait Pipe
 where
     Self: Sized,
 {
-    fn wrap_some(self) -> Option<Self> {
-        Some(self)
-    }
-    fn wrap_ok<E>(self) -> Result<Self, E> {
-        Ok(self)
-    }
-    fn wrap_err<T>(self) -> Result<T, Self> {
-        Err(self)
-    }
-    fn wrap_box(self) -> Box<Self> {
-        Box::new(self)
-    }
-    fn wrap_rc(self) -> Rc<Self> {
-        Rc::new(self)
-    }
-    fn wrap_arc(self) -> Arc<Self> {
-        Arc::new(self)
-    }
-    fn wrap_cell(self) -> Cell<Self> {
-        Cell::new(self)
-    }
-    fn wrap_ref_cell(self) -> RefCell<Self> {
-        RefCell::new(self)
-    }
-    fn wrap_mutex(self) -> Mutex<Self> {
-        Mutex::new(self)
-    }
-    fn wrap_rw_lock(self) -> RwLock<Self> {
-        RwLock::new(self)
-    }
-    fn wrap_reverse(self) -> Reverse<Self> {
-        Reverse(self)
-    }
-    fn wrap_vec(self) -> Vec<Self> {
-        vec![self]
-    }
-    fn wrap_pin(self) -> Pin<Box<Self>> {
-        Box::pin(self)
-    }
-    fn wrap_hash_set(self) -> HashSet<Self>
-    where
-        Self: Eq + Hash,
-    {
-        HashSet::from([self])
+    /// Pipe the value through a function that only takes that value as an argument.
+    fn pipe<T, F: Fn(Self) -> T>(self, f: F) -> T {
+        f(self)
     }
 }
-impl<T> WrapSelf for T {}
+impl<T: Sized> Pipe for T {}
 
+/// Extra functionality expanding on iterators.
+/// Bridges some gaps in `itertools` such as collecting
+/// [`HashMap`](std::collections::HashMap)s
 pub trait IteratorExtra: Iterator {
-    /// More convenient version of `collect::<HashMap<_, _>>()`.
+    /// More convenient version of
+    /// [`collect`](`std::iter::Iterator::collect`)`::<`[`HashMap`](std::collections::HashMap)`<_, _>>`.
     fn collect_hash_map<K, V>(self) -> HashMap<K, V>
     where
         Self: Iterator<Item = (K, V)> + Sized,
@@ -87,7 +54,8 @@ pub trait IteratorExtra: Iterator {
         self.collect()
     }
 
-    /// [`IteratorExtra::collect_hash_map`] but allows you to pass in a [`BuildHasher`] to use.
+    /// [`IteratorExtra::collect_hash_map`] but allows you to pass in a
+    /// [`BuildHasher`] to use.
     fn collect_hash_map_with_hasher<K, V, S>(self) -> HashMap<K, V, S>
     where
         Self: Iterator<Item = (K, V)> + Sized,
@@ -97,7 +65,8 @@ pub trait IteratorExtra: Iterator {
         self.collect()
     }
 
-    /// More convenient version of `collect::<HashSet<_>>()`.
+    /// More convenient version of
+    /// [`collect`](`std::iter::Iterator::collect`)`::<`[`HashSet`](std::collections::HashSet)`<_>>`.
     fn collect_hash_set<T>(self) -> HashSet<T>
     where
         Self: Iterator<Item = T> + Sized,
@@ -106,7 +75,8 @@ pub trait IteratorExtra: Iterator {
         self.collect()
     }
 
-    /// [`IteratorExtra::collect_hash_set`] but allows you to pass in a [`BuildHasher`] to use.
+    /// [`IteratorExtra::collect_hash_set`] but allows you to pass in a
+    /// [`BuildHasher`] to use.
     fn collect_hash_set_with_hasher<T, S>(self) -> HashSet<T, S>
     where
         Self: Iterator<Item = T> + Sized,
@@ -118,18 +88,90 @@ pub trait IteratorExtra: Iterator {
 }
 impl<T> IteratorExtra for T where T: Iterator + ?Sized {}
 
-pub trait FixedHex
-where
-    Self: LowerHex + UpperHex + Sized,
-{
-    /// Returns an uppercase hex string of fixed length based on the size of the type.
+/// Formats hex strings of fixed length based on the size of the type.
+/// # Examples
+/// ```rust
+/// use doodads::FixedHex;
+/// let x: u32 = 1;
+/// assert_eq!(x.fixed_hex_lower(), "00000001");
+/// assert_eq!(x.fixed_hex_upper(), "00000001");
+/// ```
+pub trait FixedHex {
+    /// Returns an uppercase hex string of fixed length based on the size of
+    /// the type.
+    fn fixed_hex_lower(&self) -> String;
+
+    /// Returns an uppercase hex string of fixed length based on the size of
+    /// the type.
+    fn fixed_hex_upper(&self) -> String;
+}
+impl<T: LowerHex + UpperHex + Sized> FixedHex for T {
+    /// Returns an uppercase hex string of fixed length based on the size of
+    /// the type.
     fn fixed_hex_lower(&self) -> String {
         format!("{:0size$x}", self, size = size_of::<Self>() * 2)
     }
 
-    /// Returns an uppercase hex string of fixed length based on the size of the type.
+    /// Returns an uppercase hex string of fixed length based on the size of
+    /// the type.
     fn fixed_hex_upper(&self) -> String {
         format!("{:0size$X}", self, size = size_of::<Self>() * 2)
     }
 }
-impl<T: LowerHex + UpperHex + Sized> FixedHex for T {}
+
+pub type Array2d<T, const W: usize, const H: usize = W> = [[T; W]; H];
+pub type Array3d<T, const W: usize, const H: usize = W, const D: usize = W> = [Array2d<T, W, H>; D];
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fixed_hex() {
+        let x: u8 = 1;
+        assert_eq!(x.fixed_hex_lower(), "01");
+        assert_eq!(x.fixed_hex_upper(), "01");
+
+        let x: u16 = 1;
+        assert_eq!(x.fixed_hex_lower(), "0001");
+        assert_eq!(x.fixed_hex_upper(), "0001");
+
+        let x: u32 = 1;
+        assert_eq!(x.fixed_hex_lower(), "00000001");
+        assert_eq!(x.fixed_hex_upper(), "00000001");
+
+        let x: u64 = 1;
+        assert_eq!(x.fixed_hex_lower(), "0000000000000001");
+        assert_eq!(x.fixed_hex_upper(), "0000000000000001");
+
+        let x: u128 = 1;
+        assert_eq!(x.fixed_hex_lower(), "00000000000000000000000000000001");
+        assert_eq!(x.fixed_hex_upper(), "00000000000000000000000000000001");
+    }
+
+    #[test]
+    fn array2d() {
+        // rectangular
+        let arr = Array2d::<i32, 3, 4>::default();
+        assert_eq!(arr.len(), 4);
+        assert_eq!(arr[0].len(), 3);
+        // square
+        let arr = Array2d::<i32, 5>::default();
+        assert_eq!(arr.len(), 5);
+        assert_eq!(arr[0].len(), 5);
+    }
+
+    #[test]
+    fn array3d() {
+        // rectangular
+        let arr = Array3d::<i32, 3, 4, 5>::default();
+        assert_eq!(arr.len(), 5);
+        assert_eq!(arr[0].len(), 4);
+        assert_eq!(arr[0][0].len(), 3);
+        // cubic
+        let arr = Array3d::<i32, 6>::default();
+        assert_eq!(arr.len(), 6);
+        assert_eq!(arr[0].len(), 6);
+        assert_eq!(arr[0][0].len(), 6);
+    }
+}
