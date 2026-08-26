@@ -1,6 +1,6 @@
 //! A generic, saturating clamped numeric type.
 
-use num_traits::{Bounded, Float, Num, Signed, ToPrimitive};
+use num_traits::{Bounded, Num, Signed, ToPrimitive};
 use std::cmp::Ordering;
 use std::fmt;
 use std::ops::{
@@ -377,22 +377,6 @@ pub trait ClampRangeApi<T, R> {
     fn from_range(value: T, range: R) -> Self;
     fn set_bounds_from_range(&mut self, range: R);
     fn try_set_bounds_from_range(&mut self, range: R) -> bool;
-}
-
-trait UnFuck
-where
-    Self: Sized,
-{
-    fn unfuck(self) -> Option<Self>;
-}
-impl<T: Float> UnFuck for T {
-    fn unfuck(self) -> Option<Self> {
-        if self.is_nan() || self.is_infinite() {
-            None
-        } else {
-            Some(self)
-        }
-    }
 }
 
 #[cfg(test)]

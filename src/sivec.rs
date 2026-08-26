@@ -1,12 +1,12 @@
-use std::ops::{Deref, Index, IndexMut};
 use itertools::Itertools;
+use std::ops::{Deref, Index, IndexMut};
 
 /// A stable-index vector.
 ///
 /// `SiVec` supports indexing but not slicing because the data structure cannot guarantee that the underlying [`Vec`] is in the same
 /// order. As such, `SiVec` should be used where order of elements is irrelevant.
 #[derive(Debug, Default, PartialEq, Clone)]
-struct SiVec<T> {
+pub struct SiVec<T> {
     /// Stores the index of the data that the stable index points to.
     data_index: Vec<usize>,
     /// Maps indexes in `data` back to the corresponding `data_index`.
@@ -15,7 +15,7 @@ struct SiVec<T> {
     data: Vec<T>,
 }
 impl<T> SiVec<T> {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
             data_index: vec![],
             id: vec![],
@@ -23,7 +23,7 @@ impl<T> SiVec<T> {
         }
     }
 
-    fn get(&self, index: usize) -> Option<&T> {
+    pub fn get(&self, index: usize) -> Option<&T> {
         if index < self.data.len() {
             Some(&self[index])
         } else {
@@ -31,7 +31,7 @@ impl<T> SiVec<T> {
         }
     }
 
-    fn insert(&mut self, element: T) -> usize {
+    pub fn insert(&mut self, element: T) -> usize {
         if self.data.len() == self.id.len() {
             let previous_capacity = self.data.len();
             self.data_index.push(previous_capacity);
@@ -47,8 +47,10 @@ impl<T> SiVec<T> {
         }
     }
 
-    fn remove(&mut self, index: usize) -> Option<T> {
-        if self.is_empty() { return None; }
+    pub fn remove(&mut self, index: usize) -> Option<T> {
+        if self.is_empty() {
+            return None;
+        }
         let physical_pos = self.data_index[index];
         let last_index = self.data.len() - 1;
         self.data.swap(physical_pos, last_index);

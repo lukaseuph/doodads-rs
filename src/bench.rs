@@ -1,5 +1,6 @@
 use std::time::{Duration, Instant};
 
+#[macro_export]
 macro_rules! st {
     ($label:expr, $callback: expr) => {
         let _st = $crate::bench::ScopeTimer::new($label, $callback);
