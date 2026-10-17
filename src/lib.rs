@@ -1,16 +1,16 @@
-#![feature(const_trait_impl)]
-#![feature(const_convert)]
-#![feature(const_iter)]
-#![feature(const_ops)]
+#![feature(const_trait_impl, const_convert, const_iter, const_ops)]
 
 pub mod bench;
 pub mod hash;
+pub mod invariants;
 pub mod math;
 pub mod sivec;
 
-use std::collections::{HashMap, HashSet};
-use std::fmt::{LowerHex, UpperHex};
-use std::hash::{BuildHasher, Hash};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::{LowerHex, UpperHex},
+    hash::{BuildHasher, Hash},
+};
 
 /// Provides a [`pipe`] method for chaining functions that map a value to another value.
 ///
@@ -26,8 +26,8 @@ use std::hash::{BuildHasher, Hash};
 /// ```
 /// use doodads::Pipe;
 ///
-/// let result = "some input".pipe(Ok);
-/// assert_eq!(result, Ok("some input"));
+/// let option: Option<_> = "some input".pipe(Some);
+/// assert_eq!(option, Some("some input"));
 /// ```
 pub trait Pipe
 where
@@ -39,6 +39,40 @@ where
     }
 }
 impl<T: Sized> Pipe for T {}
+
+pub trait OptionExtensions {
+    fn overlay(&mut self, other: Self);
+    fn overlaid(self, other: Self) -> Self;
+}
+impl<T> OptionExtensions for Option<T> {
+    /// Overwrites the value of `self` in place if `other` is [`Some`].
+    ///
+    /// # Examples
+    /// ```
+    /// use doodads::OptionExtensions;
+    ///
+    /// let mut opt = Some(5);
+    /// opt.overlay(Some(10));
+    /// opt.overlay(None);
+    /// assert_eq!(opt, Some(10));
+    /// ```
+    fn overlay(&mut self, other: Self) {
+        if other.is_some() {
+            *self = other;
+        }
+    }
+
+    /// Returns `self` if `other` is [`None`], otherwise returns `other`.
+    ///
+    /// # Examples
+    /// ```
+    /// use doodads::OptionExtensions;
+    /// let opt = Some(5).overlaid(Some(10)).overlaid(None);
+    /// assert_eq!(opt, Some(10));
+    fn overlaid(self, other: Self) -> Self {
+        if other.is_some() { other } else { self }
+    }
+}
 
 /// Extra functionality expanding on iterators.
 /// Bridges some gaps in `itertools` such as collecting
@@ -127,6 +161,11 @@ mod tests {
     use super::*;
 
     #[test]
+    fn pipe() {
+        assert_eq!(15.pipe(Some), Some(15))
+    }
+
+    #[test]
     fn fixed_hex() {
         let x: u8 = 1;
         assert_eq!(x.fixed_hex_lower(), "01");
@@ -147,6 +186,20 @@ mod tests {
         let x: u128 = 1;
         assert_eq!(x.fixed_hex_lower(), "00000000000000000000000000000001");
         assert_eq!(x.fixed_hex_upper(), "00000000000000000000000000000001");
+    }
+
+    #[test]
+    fn option_overlay() {
+        let mut opt = Some(5);
+        opt.overlay(Some(10));
+        opt.overlay(None);
+        assert_eq!(opt, Some(10));
+    }
+
+    #[test]
+    fn option_overlaid() {
+        let opt = Some(5).overlaid(Some(10)).overlaid(None);
+        assert_eq!(opt, Some(10));
     }
 
     #[test]
