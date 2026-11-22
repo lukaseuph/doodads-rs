@@ -3,61 +3,62 @@ use std::ops::{Deref, Index, IndexMut};
 
 /// A stable-index vector.
 ///
-/// `SiVec` supports indexing but not slicing because the data structure cannot guarantee that the underlying [`Vec`] is in the same
-/// order. As such, `SiVec` should be used where order of elements is irrelevant.
+/// `SiVec` supports indexing but not slicing because the data structure
+/// cannot guarantee that the underlying [`Vec`] is in the same order.
+/// As such, `SiVec` should be used where order of elements is irrelevant.
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct SiVec<T> {
     /// Stores the index of the data that the stable index points to.
-    data_index: Vec<usize>,
+    slot_to_pos: Vec<usize>,
     /// Maps indexes in `data` back to the corresponding `data_index`.
-    id: Vec<usize>,
+    pos_to_slot: Vec<usize>,
     /// The actual elements of the vector.
     data: Vec<T>,
 }
 impl<T> SiVec<T> {
     pub fn new() -> Self {
         Self {
-            data_index: vec![],
-            id: vec![],
+            slot_to_pos: vec![],
+            pos_to_slot: vec![],
             data: vec![],
         }
     }
 
+    fn position(&self, index: usize) -> Option<usize> {
+        let pos = *self.slot_to_pos.get(index)?;
+        // `pos < len` rules out freed ids; `id[pos] == index` rules out
+        // freed ids whose stale position has since been reused by another element.
+        (pos < self.data.len() && self.pos_to_slot[pos] == index).then_some(pos)
+    }
+
     pub fn get(&self, index: usize) -> Option<&T> {
-        if index < self.data.len() {
-            Some(&self[index])
-        } else {
-            None
-        }
+        self.position(index).map(|p| &self.data[p])
     }
 
     pub fn insert(&mut self, element: T) -> usize {
-        if self.data.len() == self.id.len() {
+        if self.data.len() == self.pos_to_slot.len() {
             let previous_capacity = self.data.len();
-            self.data_index.push(previous_capacity);
-            self.id.push(previous_capacity);
+            self.slot_to_pos.push(previous_capacity);
+            self.pos_to_slot.push(previous_capacity);
             self.data.push(element);
             previous_capacity
         } else {
             let new_position = self.data.len();
-            let reused_id = self.id[new_position];
-            self.data_index[reused_id] = new_position;
+            let reused_id = self.pos_to_slot[new_position];
+            self.slot_to_pos[reused_id] = new_position;
             self.data.push(element);
             reused_id
         }
     }
 
     pub fn remove(&mut self, index: usize) -> Option<T> {
-        if self.is_empty() {
-            return None;
-        }
-        let physical_pos = self.data_index[index];
+        let physical_pos = self.position(index)?;
         let last_index = self.data.len() - 1;
         self.data.swap(physical_pos, last_index);
-        self.id.swap(physical_pos, last_index);
+        self.pos_to_slot.swap(physical_pos, last_index);
         // update data index
-        self.data_index[self.id[physical_pos]] = physical_pos;
-        self.data_index[self.id[last_index]] = last_index;
+        self.slot_to_pos[self.pos_to_slot[physical_pos]] = physical_pos;
+        self.slot_to_pos[self.pos_to_slot[last_index]] = last_index;
         // pop
         self.data.pop()
     }
@@ -90,12 +91,12 @@ impl<T> FromIterator<T> for SiVec<T> {
 impl<T> Index<usize> for SiVec<T> {
     type Output = T;
     fn index(&self, index: usize) -> &Self::Output {
-        &self.data[self.data_index[index]]
+        &self.data[self.slot_to_pos[index]]
     }
 }
 impl<T> IndexMut<usize> for SiVec<T> {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
-        &mut self.data[self.data_index[index]]
+        &mut self.data[self.slot_to_pos[index]]
     }
 }
 impl<T> Deref for SiVec<T> {
