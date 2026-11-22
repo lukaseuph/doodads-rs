@@ -6,17 +6,29 @@ use std::{
     rc::Rc,
 };
 
-#[derive(Debug)]
-struct NodeData<T, U> {
-    data: T,
-    outgoing: Vec<Edge<T, U>>,
-    incoming: Vec<Edge<T, U>>,
-}
-
+/// A node in a directed graph, holding data of type `T`.
+///
+/// `Node` is a shared handle: cloning it produces another handle to the same
+/// node, and two nodes are equal only if they are the same node.
+///
+/// Nodes are connected to each other with [`Edge`]s, which carry data of type `U`.
+/// Each edge is recorded at both of its ends, so graphs can be walked forward
+/// and backward. Self-loops are allowed; duplicate edges between the same pair
+/// of nodes are not.
 pub struct Node<T, U = ()> {
     node: Rc<RefCell<NodeData<T, U>>>,
 }
 impl<T, U> Node<T, U> {
+    /// Creates a new node holding `data`, with no edges.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use doodads::node::Node;
+    /// let a: Node<&str> = Node::new("a");
+    /// assert!(a.outgoing().is_empty());
+    /// assert!(a.incoming().is_empty());
+    /// ```
     pub fn new(data: T) -> Self {
         Self {
             node: Rc::new(RefCell::new(NodeData {
@@ -27,18 +39,71 @@ impl<T, U> Node<T, U> {
         }
     }
 
+    /// Returns a reference to the data stored in this node.
+    ///
+    /// The node stays borrowed for as long as the returned guard is alive.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the node is currently mutably borrowed. That only happens
+    /// inside [`connect`](Node::connect) and [`disconnect`](Node::disconnect),
+    /// so it is not normally reachable from user code.
     pub fn data(&self) -> Ref<'_, T> {
         Ref::map(self.node.borrow(), |n| &n.data)
     }
 
+    /// Returns the edges leaving this node, in the order they were connected.
+    ///
+    /// Each [`Edge::node`] is the edge's target. The node stays borrowed for as
+    /// long as the returned guard is alive, so drop it (or copy out what you
+    /// need) before calling [`connect`](Node::connect) or
+    /// [`disconnect`](Node::disconnect) on this node, which would panic.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the node is currently mutably borrowed.
     pub fn outgoing(&self) -> Ref<'_, [Edge<T, U>]> {
         Ref::map(self.node.borrow(), |n| n.outgoing.as_slice())
     }
 
+    /// Returns the edges entering this node, in the order they were connected.
+    ///
+    /// Each [`Edge::node`] is the edge's *source*, the node the edge came from.
+    /// See [`outgoing`](Node::outgoing) for the borrowing rules.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the node is currently mutably borrowed.
     pub fn incoming(&self) -> Ref<'_, [Edge<T, U>]> {
         Ref::map(self.node.borrow(), |n| n.incoming.as_slice())
     }
 
+    /// Adds a directed edge from this node to `other`, carrying `edge_data`.
+    ///
+    /// Returns `true` if the edge was added, or `false` if this node already has
+    /// an edge to `other`, in which case nothing changes and `edge_data` is
+    /// dropped. Connecting a node to itself is allowed.
+    ///
+    /// The edge is recorded at both ends: it appears in this node's
+    /// [`outgoing`](Node::outgoing) edges and in `other`'s
+    /// [`incoming`](Node::incoming) edges, and both entries share the same
+    /// `edge_data`. Edges are directed, so connecting `a` to `b` does not connect
+    /// `b` to `a`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if either node is currently borrowed, for example while a guard
+    /// returned by [`outgoing`](Node::outgoing) is still alive.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let a: Node<&str> = Node::new("a");
+    /// let b = Node::new("b");
+    /// assert!(a.connect(&b, ()));
+    /// assert!(!a.connect(&b, ())); // duplicate
+    /// assert!(b.connect(&a, ()));  // opposite direction is a different edge
+    /// ```
     pub fn connect(&self, other: &Node<T, U>, edge_data: U) -> bool {
         if self
             .node
@@ -62,6 +127,35 @@ impl<T, U> Node<T, U> {
         true
     }
 
+    /// Removes the edge from this node to `other`, at both ends.
+    ///
+    /// Returns `true` if the edge existed and was removed, or `false` if this
+    /// node has no edge to `other`, in which case nothing changes. Edges are
+    /// directed, so disconnecting `a` from `b` leaves any edge from `b` to `a`
+    /// in place. Disconnecting a self-loop works the same way, with `other` being
+    /// the node itself.
+    ///
+    /// Removing the edge releases the references the two nodes held to each
+    /// other. A node that is connected to itself holds a reference to itself, so
+    /// it is never freed until that self-loop is disconnected.
+    ///
+    /// The order of the remaining edges is preserved.
+    ///
+    /// # Panics
+    ///
+    /// Panics if either node is currently borrowed, for example while a guard
+    /// returned by [`outgoing`](Node::outgoing) or [`incoming`](Node::incoming)
+    /// is still alive.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let a: Node<&str> = Node::new("a");
+    /// let b = Node::new("b");
+    /// a.connect(&b, ());
+    /// assert!(a.disconnect(&b));
+    /// assert!(!a.disconnect(&b)); // already gone
+    /// ```
     pub fn disconnect(&self, other: &Node<T, U>) -> bool {
         let mut self_borrow = self.node.borrow_mut();
         let Some(self_index) = self_borrow
@@ -87,6 +181,47 @@ impl<T, U> Node<T, U> {
         true
     }
 
+    /// Walks every path starting from this node, calling `f` at each node visited.
+    ///
+    /// `direction` chooses which edges to follow: [`Direction::Forward`] follows
+    /// [`outgoing`](Node::outgoing) edges, [`Direction::Backward`] follows
+    /// [`incoming`](Node::incoming) edges.
+    ///
+    /// `f` receives the accumulator, the node being visited, and the edge that
+    /// was just crossed to reach it (`None` for the starting node). It returns
+    /// the accumulator to pass on to the neighbors. Each branch gets its own
+    /// clone of the accumulator, so values flow down a path and never sideways
+    /// between branches. The walk is depth-first, following edges in the order
+    /// they were connected.
+    ///
+    /// A node is never visited twice on the same path, so cycles and self-loops
+    /// terminate: when a path reaches a node it has already visited, that branch
+    /// stops. Nodes reachable by several different paths, such as the bottom of a
+    /// diamond, are visited once per path. This can be exponential in the size of
+    /// the graph; use [`find`](Node::find) if you only need to visit each node once.
+    ///
+    /// No borrow is held while `f` runs, so the callback may freely call
+    /// [`connect`](Node::connect) and [`disconnect`](Node::disconnect). Edges
+    /// added during the walk may or may not be followed, because each node's
+    /// edge list is copied when the walk arrives at it.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let a: Node<&str> = Node::new("a");
+    /// let b = Node::new("b");
+    /// let c = Node::new("c");
+    /// a.connect(&b, ());
+    /// b.connect(&c, ());
+    ///
+    /// // Record each node's depth.
+    /// let mut depths = Vec::new();
+    /// a.walk(Direction::Forward, 0, |depth, node, _| {
+    ///     depths.push((*node.data(), depth));
+    ///     depth + 1
+    /// });
+    /// assert_eq!(depths, [("a", 0), ("b", 1), ("c", 2)]);
+    /// ```
     pub fn walk<A: Clone, F: FnMut(A, &Node<T, U>, Option<&Edge<T, U>>) -> A>(
         &self,
         direction: Direction,
@@ -97,6 +232,7 @@ impl<T, U> Node<T, U> {
         self.walk_inner(direction, acc, None, &mut f, &mut path);
     }
 
+    /// The inner logic of [`Node::walk`].
     fn walk_inner<A: Clone, F: FnMut(A, &Node<T, U>, Option<&Edge<T, U>>) -> A>(
         &self,
         direction: Direction,
@@ -122,6 +258,42 @@ impl<T, U> Node<T, U> {
         path.pop();
     }
 
+    /// Returns the first node, starting with this one, for which `pred` returns `true`.
+    ///
+    /// `direction` chooses which edges to follow: [`Direction::Forward`] follows
+    /// [`outgoing`](Node::outgoing) edges, [`Direction::Backward`] follows
+    /// [`incoming`](Node::incoming) edges. `order` chooses the traversal:
+    /// [`Traversal::BreadthFirst`] finds the match closest to this node (fewest
+    /// edges away), while [`Traversal::DepthFirst`] dives down one branch before
+    /// trying others, so it may find a different match when several exist.
+    ///
+    /// Each node is visited at most once, so cycles and diamonds are handled in
+    /// time linear in the size of the graph. Returns `None` if no reachable node
+    /// matches. This node is checked first, so a match on the starting node is
+    /// returned immediately.
+    ///
+    /// No borrow is held while `pred` runs, so it may call
+    /// [`connect`](Node::connect) and [`disconnect`](Node::disconnect). The
+    /// search does not recurse, so deep graphs cannot overflow the stack. Use
+    /// [`walk`](Node::walk) if you need to visit every path rather than every node.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `pred` panics.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let a: Node<&str> = Node::new("a");
+    /// let b = Node::new("b");
+    /// let c = Node::new("c");
+    /// a.connect(&b, ());
+    /// b.connect(&c, ());
+    ///
+    /// let found = a.find(Direction::Forward, Traversal::BreadthFirst, |n| *n.data() == "c");
+    /// assert!(found == Some(c.clone()));
+    /// assert!(a.find(Direction::Backward, Traversal::BreadthFirst, |n| *n.data() == "c").is_none());
+    /// ```
     pub fn find(
         &self,
         direction: Direction,
@@ -195,6 +367,14 @@ impl<T: fmt::Debug, U> fmt::Debug for Node<T, U> {
     }
 }
 
+/// A directed connection between two [`Node`]s, carrying data of type `U`.
+///
+/// Edges are created by [`Node::connect`] and removed by [`Node::disconnect`]. You get them from
+/// [`Node::outgoing`], [`Node::incoming`], and the callback passed to [`Node::walk`].
+///
+/// Each edge is stored at both of its ends, and the two entries share the same data. In a node's
+/// outgoing list, [`Edge::node`] is the edge's target; in its incoming list, it is the edge's
+/// source. Cloning an `Edge` produces another handle to the same connection, not a new one.
 #[derive(Debug)]
 pub struct Edge<T, U = ()> {
     node: Node<T, U>,
@@ -205,10 +385,18 @@ impl<T, U> Edge<T, U> {
         Self { node, data }
     }
 
+    /// Returns the node at the other end of this edge.
+    ///
+    /// This is the target when the edge came from [`Node::outgoing`], and the source when it came
+    /// from [`Node::incoming`].
     pub fn node(&self) -> &Node<T, U> {
         &self.node
     }
 
+    /// Returns the data carried by this edge.
+    ///
+    /// Both ends of the edge share this same allocation, so [`Rc::ptr_eq`] on two edges' data tells
+    /// you whether they are the two ends of one connection.
     pub fn data(&self) -> &Rc<U> {
         &self.data
     }
@@ -222,6 +410,23 @@ impl<T, U> Clone for Edge<T, U> {
     }
 }
 
+/// The shared state behind a [`Node`]: its data and its edges.
+///
+/// This type is private so that all edges are created and removed through
+/// [`Node::connect`] and [`Node::disconnect`], which keep every edge recorded at
+/// both of its ends. `Node::disconnect` relies on that invariant.
+#[derive(Debug)]
+struct NodeData<T, U> {
+    data: T,
+    outgoing: Vec<Edge<T, U>>,
+    incoming: Vec<Edge<T, U>>,
+}
+
+/// Which edges to follow when moving between nodes.
+///
+/// [`Direction::Forward`] follows the outgoing edges of a [`Node`], while
+/// [`Direction::Backward`] follows the incoming edges. Used by [`Node::walk`]
+/// and [`Node::find`].
 #[derive(Clone, Copy)]
 pub enum Direction {
     Forward,
@@ -236,9 +441,17 @@ impl Direction {
     }
 }
 
+/// The order in which [`Node::find`] visits nodes.
+///
+/// Both orders visit each node at most once, so they differ only in which
+/// match is returned when several nodes satisfy the predicate.
 #[derive(Clone, Copy)]
 pub enum Traversal {
+    /// Visit nodes in order of distance from the starting node, so the match
+    /// with the fewest edges between it and the start is found first.
     BreadthFirst,
+    /// Follow one branch as deep as it goes before trying others, so the
+    /// match found may be farther away than the closest one.
     DepthFirst,
 }
 
