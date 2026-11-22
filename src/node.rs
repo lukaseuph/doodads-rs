@@ -246,7 +246,6 @@ pub enum Traversal {
 mod tests {
     use super::*;
 
-    // U has no default in this version, so unlabeled nodes need a concrete type.
     type N = Node<&'static str>;
 
     fn node(name: &'static str) -> N {
@@ -296,8 +295,6 @@ mod tests {
         c.connect(&d, ());
         (a, b, c, d)
     }
-
-    // ---- connect / disconnect ----
 
     #[test]
     fn connect_mirrors_edge() {
@@ -383,8 +380,6 @@ mod tests {
         assert_eq!(**a.outgoing()[0].data(), "label");
         assert!(Rc::ptr_eq(a.outgoing()[0].data(), b.incoming()[0].data()));
     }
-
-    // ---- walk ----
 
     #[test]
     fn walk_chain_forward_and_backward() {
@@ -477,8 +472,6 @@ mod tests {
         assert_eq!(out, ["a", "b", "x"]);
     }
 
-    // ---- find ----
-
     #[test]
     fn find_checks_the_start_node() {
         let a = node("a");
@@ -546,8 +539,6 @@ mod tests {
             assert_eq!(calls, 4);
         }
     }
-
-    // ---- Eq / Hash / Debug ----
 
     #[test]
     fn node_equality_is_identity() {
