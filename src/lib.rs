@@ -4,6 +4,7 @@ pub mod bench;
 pub mod hash;
 pub mod invariants;
 pub mod math;
+pub mod node;
 pub mod sivec;
 
 use std::{
